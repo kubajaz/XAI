@@ -69,4 +69,9 @@ Skuteczność systemu zostanie oceniona na dwóch poziomach:
 *   **Złożoność obliczeniowa:** Pełny graf Hetionet jest duży, co może wymagać optymalizacji zużycia pamięci VRAM.
 *   **Niestabilność wyjaśnień:** Metody oparte na maskowaniu mogą być wrażliwe na hiperparametry, co będzie wymagało starannego dostrojenia modułu XAI.
 
+## 9. Bibliografia
+1. Schlichtkrull, M., Kipf, T. N., Bloem, P., Van Den Berg, R., Titov, I., Welling, M. (2018). *Modeling Relational Data with Graph Convolutional Networks*. ESWC.
+2. Ying, R., Bourgeois, D., You, J., Zitnik, M., Leskovec, J. (2019). *GNNExplainer: Generating Explanations for Graph Neural Networks*. NeurIPS.
+3. Wójcik, F. *Grafowe sieci neuronowe* (książka).
+
 ---

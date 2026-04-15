@@ -1,4 +1,4 @@
-# Dane (duże pliki — pobierane skryptem)
+# Dane (duże pliki - pobierane skryptem)
 data/raw/
 data/processed/*.pt
 data/processed/*.npz
