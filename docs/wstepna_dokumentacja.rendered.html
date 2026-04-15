@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="pl">
+<head><meta charset="utf-8"><title>Wstępna dokumentacja</title><style>
+@page { size: A4; margin: 2.0cm 1.9cm 2.1cm 1.9cm; }
+body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 11pt; line-height: 1.52; color: #1a1a1a; }
+h1 { font-size: 21pt; margin: 0 0 .45em 0; color: #0f2f57; }
+h2 { font-size: 15.5pt; margin: 1.25em 0 .45em 0; color: #123d6b; border-bottom: 1px solid #d6e0ea; padding-bottom: .12em; }
+h3 { font-size: 12.7pt; margin: .95em 0 .3em 0; color: #1b4d80; }
+p { margin: .40em 0 .70em 0; text-align: justify; }
+ul, ol { margin: .25em 0 .72em 1.2em; padding-left: .6em; }
+li { margin: .18em 0; }
+img { display:block; margin:.85em auto .3em auto; max-width:100%; height:auto; border:1px solid #d9d9d9; border-radius:6px; }
+hr { border:none; border-top:1px solid #d0d7de; margin: 1em 0; }
+code { background:#f5f7fa; padding:.08em .25em; border-radius:4px; }
+strong { color:#0f2f57; }
+</style></head>
+<body><h1 id="dokumentacja-wstepna-projektu-zaawansowane-sieci-neuronowe">Dokumentacja Wstępna Projektu: Zaawansowane Sieci Neuronowe</h1>
+<p><strong>Temat:</strong> Interpretowalność relacyjnych sieci grafowych (RGCN) w zadaniu Drug Repurposing na grafie wiedzy Hetionet.<br />
+<strong>Autorzy:</strong> Jakub Jażdżyk, Kajetan Rożej<br />
+<strong>Data:</strong> 12.04.2026  </p>
+<hr />
+<h2 id="1-wprowadzenie-i-kontekst-projektu">1. Wprowadzenie i Kontekst Projektu</h2>
+<p>Współczesna medycyna stoi przed wyzwaniem ogromnej ilości danych, których powiązania wykraczają poza możliwości percepcyjne człowieka. Jednym z najbardziej obiecujących kierunków jest <strong>Drug Repurposing</strong> - poszukiwanie nowych zastosowań dla leków już dopuszczonych do obrotu. Projekt ten ma na celu budowę systemu, który nie tylko wskaże potencjalne nowe terapie, ale przede wszystkim „tłumacząc się” ze swojej decyzji, wskaże biologiczne ścieżki, które do niej doprowadziły.</p>
+<p>Głównym problemem badawczym jest tzw. „Black-Box effect” w modelach Deep Learning. W medycynie sama predykcja („ten lek leczy tę chorobę”) jest niewystarczająca - lekarz i badacz potrzebują uzasadnienia w postaci konkretnych interakcji genetycznych i białkowych.</p>
+<h2 id="2-cel-i-hipotezy-badawcze">2. Cel i Hipotezy Badawcze</h2>
+<p>Celem projektu jest implementacja relacyjnej sieci grafowej (RGCN), która nauczy się semantyki grafu wiedzy Hetionet, a następnie zostanie poddana procesowi interpretacji przy użyciu metod XAI (Explainable AI).</p>
+<p><strong>Hipotezy:</strong></p>
+<ol>
+<li>
+<p><strong>H1 (Relacyjność):</strong> Architektura RGCN, dzięki zastosowaniu osobnych macierzy wag dla każdego typu relacji, jest w stanie odróżnić krawędzie o znaczeniu pozytywnym (terapeutycznym) od negatywnych (skutki uboczne).</p>
+</li>
+<li>
+<p><strong>H2 (Redukcja Szumu):</strong> Metoda GNNExplainer pozwoli na wyekstrahowanie z gęstego grafu (tzw. <em>hairball</em>) ścieżek o długości 2-3 skoków, które są zrozumiałe dla eksperta i biologicznie poprawne.</p>
+</li>
+</ol>
+<h2 id="3-charakterystyka-zbioru-danych-hetionet-v10">3. Charakterystyka Zbioru Danych (Hetionet v1.0)</h2>
+<p>Projekt bazuje na Hetionet – wielowarstwowym grafie wiedzy integrującym dane z dziesiątek baz biomedycznych.</p>
+<ul>
+<li>
+<p><strong>Węzły (47 031):</strong> Podzielone na 11 typów (Leki, Choroby, Geny, Ścieżki sygnałowe, Anatomia).</p>
+</li>
+<li>
+<p><strong>Krawędzie (2 250 197):</strong> Podzielone na 24 typy relacji (meta-edges).</p>
+</li>
+<li>
+<p><strong>Kluczowa relacja (Target):</strong> <code>CtD</code> (Compound–treats–Disease). Tę relację model będzie musiał zgadywać, analizując pozostałe 23 typy połączeń.</p>
+</li>
+</ul>
+<p>Poniżej: <strong>przykładowy podgraf</strong> (BFS, 2 skoki, limit węzłów) wokół losowej krawędzi CtD - wygenerowany skryptem <code>scripts/visualize_hetionet_subgraph.py</code> z przetworzonych danych. Kolory = typ węzła (Compound, Disease, Gene itd.); pełny graf jest zbyt gęsty, żeby pokazać go na jednym slajdzie.</p>
+<p><img alt="Fragment grafu Hetionet (hetionet_subgraph.png)" src="../figures/hetionet_subgraph.png" /></p>
+<h2 id="4-metodyka-i-architektura-rozwiazania">4. Metodyka i Architektura Rozwiązania</h2>
+<h3 id="41-zadanie-link-prediction-uczenie-samo-nadzorowane">4.1. Zadanie Link Prediction (Uczenie Samo-nadzorowane)</h3>
+<p>Model zostanie wytrenowany w paradygmacie uzupełniania brakujących ogniw. Proces ten przebiega w trzech krokach:</p>
+<ol>
+<li>
+<p><strong>Maskowanie:</strong> Część istniejących relacji &ldquo;lek-leczy-chorobę&rdquo; zostaje ukryta przed modelem.</p>
+</li>
+<li>
+<p><strong>Uczenie:</strong> Model analizuje pozostałe 2 miliony krawędzi (np. jak dany lek wpływa na geny, a jak te geny korelują z chorobą), budując wewnętrzną reprezentację wiedzy.</p>
+</li>
+<li>
+<p><strong>Weryfikacja:</strong> Model musi ocenić prawdopodobieństwo istnienia krawędzi, których nie widział. Wysoki wynik dla par nieistniejących w bazie danych będzie traktowany jako potencjalne odkrycie nowego zastosowania leku.</p>
+</li>
+</ol>
+<h3 id="42-encoder-relational-graph-convolutional-network-rgcn">4.2. Encoder: Relational Graph Convolutional Network (RGCN)</h3>
+<p>Sercem modelu jest sieć RGCN. Jej działanie opiera się na mechanizmie <strong>Message Passing</strong>:</p>
+<ul>
+<li>
+<p>Węzły wymieniają się informacjami (embeddingami) ze swoimi sąsiadami.</p>
+</li>
+<li>
+<p>W odróżnieniu od standardowych sieci grafowych, w RGCN każda wiadomość przechodzi przez filtr (macierz wag) przypisany do konkretnego typu relacji.</p>
+</li>
+<li>
+<p>Dzięki temu model „rozumie”, że informacja płynąca od genu jest inna niż informacja płynąca od objawu chorobowego.</p>
+</li>
+</ul>
+<h3 id="43-decoder-distmult">4.3. Decoder: DistMult</h3>
+<p>Jako dekoder zostanie wykorzystana funkcja punktacji <strong>DistMult</strong>, która oblicza iloczyn skalarny między embeddingami leku i choroby, uwzględniając relację terapeutyczną. Pozwala to na uzyskanie końcowego prawdopodobieństwa sukcesu leczenia.</p>
+<h2 id="5-interpretowalnosc-explainable-ai">5. Interpretowalność (Explainable AI)</h2>
+<p>Kluczowym elementem projektu jest moduł wyjaśniający oparty na <strong>GNNExplainer</strong>. Proces generowania wyjaśnienia dla wybranej predykcji będzie przebiegał następująco:</p>
+<ol>
+<li>
+<p><strong>Optymalizacja maski:</strong> GNNExplainer przeprowadza serię symulacji, nakładając maski na krawędzie w otoczeniu wybranego leku.</p>
+</li>
+<li>
+<p><strong>Analiza istotności:</strong> Algorytm identyfikuje, które krawędzie są kluczowe dla końcowego wyniku. Jeśli usunięcie połączenia z „Genem X” powoduje drastyczny spadek pewności modelu, krawędź ta jest uznawana za ważną.</p>
+</li>
+<li>
+<p><strong>Wizualizacja ścieżki dowodowej:</strong> Wynikiem działania modułu będzie czytelny podgraf, pokazujący np. łańcuch: <em>Lek A -&gt; Wiąże Gen B -&gt; Współwystępuje z Chorobą C</em>.</p>
+</li>
+</ol>
+<h2 id="6-ewaluacja-projektu">6. Ewaluacja Projektu</h2>
+<p>Skuteczność systemu zostanie oceniona na dwóch poziomach:</p>
+<ul>
+<li>
+<p><strong>Poziom AI (Predykcja):</strong> Wykorzystanie metryk AUC-ROC oraz MRR (Mean Reciprocal Rank), aby sprawdzić, jak dobrze model odnajduje ukryte połączenia medyczne.</p>
+</li>
+<li>
+<p><strong>Poziom XAI (Wyjaśnienie):</strong> </p>
+<ul>
+<li>
+<p><strong>Fidelity (Wierność):</strong> Czy wyjaśnienie faktycznie odzwierciedla logikę modelu?</p>
+</li>
+<li>
+<p><strong>Sparsity (Zwięzłość):</strong> Czy wyjaśnienie jest na tyle krótkie, by człowiek mógł je przeanalizować?</p>
+</li>
+<li>
+<p><strong>Analiza Jakościowa:</strong> Weryfikacja wybranych przypadków z literaturą medyczną.</p>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="7-harmonogram-i-kamienie-milowe">7. Harmonogram i Kamienie Milowe</h2>
+<ol>
+<li>
+<p><strong>Faza 1 (Zakończona):</strong> Przygotowanie środowiska i preprocessing danych Hetionet do formatu PyTorch Geometric.</p>
+</li>
+<li>
+<p><strong>Faza 2 (W toku):</strong> Implementacja i trening modelu RGCN przy użyciu techniki <em>Neighbor Sampling</em> (obsługa dużego grafu).</p>
+</li>
+<li>
+<p><strong>Faza 3 (Planowana):</strong> Integracja z GNNExplainer i budowa modułu wizualizacji grafów wyjaśniających.</p>
+</li>
+<li>
+<p><strong>Faza 4 (Planowana):</strong> Eksperymenty badawcze, zebranie metryk i przygotowanie raportu końcowego.</p>
+</li>
+</ol>
+<h2 id="8-ryzyka-projektowe">8. Ryzyka Projektowe</h2>
+<ul>
+<li>
+<p><strong>Złożoność obliczeniowa:</strong> Pełny graf Hetionet jest duży, co może wymagać optymalizacji zużycia pamięci VRAM.</p>
+</li>
+<li>
+<p><strong>Niestabilność wyjaśnień:</strong> Metody oparte na maskowaniu mogą być wrażliwe na hiperparametry, co będzie wymagało starannego dostrojenia modułu XAI.</p>
+</li>
+</ul>
+<h2 id="9-bibliografia">9. Bibliografia</h2>
+<ol>
+<li>
+<p>Schlichtkrull, M., Kipf, T. N., Bloem, P., Van Den Berg, R., Titov, I., Welling, M. (2018). <em>Modeling Relational Data with Graph Convolutional Networks</em>. ESWC.</p>
+</li>
+<li>
+<p>Ying, R., Bourgeois, D., You, J., Zitnik, M., Leskovec, J. (2019). <em>GNNExplainer: Generating Explanations for Graph Neural Networks</em>. NeurIPS.</p>
+</li>
+<li>
+<p>Wójcik, F. <em>Grafowe sieci neuronowe</em> (książka).</p>
+</li>
+</ol>
+<hr /></body>
+</html>
