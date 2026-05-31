@@ -1,17 +1,14 @@
-# Dane (duże pliki - pobierane skryptem)
+# Dane
 data/raw/
-data/processed/*.pt
 data/processed/*.npz
 data/processed/*.pkl
+
+# Artefakty
+outputs/
+model.pth
 
 # Python
 __pycache__/
 *.py[cod]
-.venv/
 venv/
-.python-version
-.env
-
-# IDE
-.idea/
-.vscode/
+.venv/
