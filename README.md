@@ -9,7 +9,10 @@ Projekt przewiduje relację **CcSE** (*Compound causes Side Effect*) na grafie w
 | `scripts/prepare_hetionet.py` | Jednorazowe obranie i preprocessing danych |
 | `dataset.py` | Hetionet (`.npz` + `.pkl`) → graf `HeteroData` dla PyTorch Geometric |
 | `model.py` | RGCN (encoder) + DistMult (decoder) — score dla pary lek–skutek uboczny |
-| `train.py` | Link prediction CcSE: split, trening, ewaluacja, zapis `model.pth` |
+| `train.py` | CLI treningu (entry point) |
+| `train_utils.py` | Logika treningu: config, pętla, ewaluacja, checkpointy |
+| `scripts/run_optuna_study.py` | Optuna — wiele trialów lokalnie |
+| `scripts/run_optuna_trial.py` | Optuna — jeden trial (SLURM array) lub `--show-best` |
 | `explain_gnn.py` | GNNExplainer: które krawędzie podgrafu uzasadniają score modelu |
 
 ## Uruchomienie
@@ -20,15 +23,73 @@ pip install -r requirements.txt
 
 python scripts/prepare_hetionet.py
 
+# Trening (domyślne hiperparametry)
+wandb login   # jednorazowo
 python train.py
+
+# Własne hiperparametry
+python train.py --help
+python train.py \
+  --batch-size 512 \
+  --embed-dim 128 \
+  --lr 5e-4 \
+  --weight-decay 1e-4 \
+  --num-neighbors 20 15 \
+  --wandb-run-name my-run
 
 python explain_gnn.py --example
 python explain_gnn.py --compound 322 --side-effect 1245 --epochs 100 --top-k 15
 ```
 
-**Wyniki:** `model.pth`, `outputs/explanation.png`, `outputs/explanation_gnn.png`
+**Wyniki:** `model.pth`, logi w projekcie W&B `zzsn-gnn-xai`, `outputs/explanation_gnn.png`
 
 Indeksy `--compound` / `--side-effect` to numery węzłów w `HeteroData`. Flaga `--example` bierze pierwszą parę CcSE z grafu.
+
+## Weights & Biases
+
+- Domyślny projekt: **`zzsn-gnn-xai`** (nadpisanie: `--wandb-project` lub `WANDB_PROJECT`)
+- Wyłączenie: `--no-wandb`
+- Zmienne: `WANDB_API_KEY` (wymagane przy logowaniu)
+
+## Optuna
+
+Lokalnie (jeden proces, wiele trialów):
+
+```bash
+python scripts/run_optuna_study.py --n-trials 20 --promote-best
+```
+
+Checkpoints trialów: `outputs/checkpoints/trial_N.pth`. Study DB: `outputs/optuna/hetionet_ccse.db`.
+
+## SLURM
+
+Szablony w `scripts/slurm/` (dostosuj `module load` / `venv` w plikach).
+
+```bash
+export WANDB_API_KEY=...
+sbatch scripts/slurm/train.sbatch
+
+# Siatka ręczna (4 zadania)
+sbatch scripts/slurm/train_array.sbatch
+
+# Optuna: jeden trial na zadanie array
+sbatch scripts/slurm/optuna_array.sbatch
+# Po zakończeniu array:
+python scripts/run_optuna_trial.py --show-best --promote-best
+```
+
+Dla równoległych trialów Optuny na wielu węzłach preferuj **`OPTUNA_STORAGE`** z PostgreSQL zamiast SQLite na NFS.
+
+Zmienne środowiskowe:
+
+| Zmienna | Opis |
+|---------|------|
+| `WANDB_API_KEY` | Autoryzacja W&B |
+| `WANDB_PROJECT` | Nadpisuje domyślny projekt |
+| `OPTUNA_STORAGE` | URL bazy study (np. `postgresql+psycopg2://...`) |
+| `DATA_PROCESSED` | Ścieżka do `data/processed` na węźle obliczeniowym |
+
+Przykładowa siatka lokalna: `bash scripts/train_grid.sh`
 
 ## Zadanie
 

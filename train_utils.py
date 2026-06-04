@@ -1,0 +1,304 @@
+"""Logika treningu CcSE: konfiguracja, pętla uczenia, ewaluacja, checkpointy."""
+
+from __future__ import annotations
+
+import os
+import shutil
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+import torch
+import torch.nn.functional as F
+import torch_geometric.transforms as T
+from sklearn.metrics import average_precision_score, roc_auc_score
+from torch_geometric.loader import LinkNeighborLoader
+
+from dataset import get_hetionet_data
+from model import CCSE, Model
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+PROCESSED = os.path.join(ROOT, "data", "processed")
+DEFAULT_CHECKPOINT = os.path.join(ROOT, "model.pth")
+WANDB_PROJECT_DEFAULT = "zzsn-gnn-xai"
+CHECKPOINTS_DIR = os.path.join(ROOT, "outputs", "checkpoints")
+
+
+@dataclass
+class TrainConfig:
+    processed_dir: str = PROCESSED
+    checkpoint: str = DEFAULT_CHECKPOINT
+    seed: int = 42
+    epochs: int = 50
+    patience: int = 10
+    batch_size: int = 256
+    embed_dim: int = 64
+    lr: float = 1e-3
+    weight_decay: float = 1e-5
+    num_neighbors: list[int] = field(default_factory=lambda: [15, 10])
+    use_wandb: bool = True
+    wandb_project: str = WANDB_PROJECT_DEFAULT
+    wandb_run_name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def set_seed(seed: int) -> None:
+    import random
+
+    import numpy as np
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
+@torch.no_grad()
+def evaluate(model, loader, device):
+    model.eval()
+    scores, labels = [], []
+    for batch in loader:
+        batch = batch.to(device)
+        z = model.encode(batch)
+        eli = batch[CCSE].edge_label_index
+        y = batch[CCSE].edge_label
+        s = model.predict(z, eli[0], eli[1])
+        scores.append(s.cpu())
+        labels.append(y.cpu())
+    y_score = torch.cat(scores).numpy()
+    y_true = torch.cat(labels).numpy()
+    return roc_auc_score(y_true, y_score), average_precision_score(y_true, y_score)
+
+
+def save_checkpoint(
+    path: str,
+    model: Model,
+    epoch: int,
+    val_ap: float,
+    val_auc: float,
+    config: TrainConfig,
+) -> None:
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    torch.save(
+        {
+            "model": model.state_dict(),
+            "epoch": epoch,
+            "val_ap": val_ap,
+            "val_auc": val_auc,
+            "config": config.to_dict(),
+        },
+        path,
+    )
+
+
+def run_training(
+    config: TrainConfig,
+    trial: Any | None = None,
+) -> dict[str, Any]:
+    """Pełny przebieg treningu. trial: opcjonalny optuna.Trial (report + prune)."""
+    import optuna
+
+    set_seed(config.seed)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Urządzenie: {device}")
+
+    data = get_hetionet_data(config.processed_dir)
+    print(f"Graf: {data.num_nodes} węzłów, {data.num_edges} krawędzi")
+    print(f"CcSE: {data[CCSE].edge_index.size(1)} relacji lek→skutek uboczny")
+    print(
+        f"      {data['Compound'].num_nodes} leków, "
+        f"{data['Side Effect'].num_nodes} skutków ubocznych"
+    )
+
+    split = T.RandomLinkSplit(
+        num_val=0.1,
+        num_test=0.1,
+        disjoint_train_ratio=0.3,
+        add_negative_train_samples=False,
+        neg_sampling_ratio=1.0,
+        edge_types=CCSE,
+    )
+    train_data, val_data, test_data = split(data)
+
+    n_train = int((train_data[CCSE].edge_label == 1).sum())
+    n_val = int(val_data[CCSE].edge_label.numel())
+    print(
+        f"Split CcSE: train {n_train} poz., "
+        f"val {n_val} par, test {int(test_data[CCSE].edge_label.numel())} par"
+    )
+
+    loader_kw = dict(num_neighbors=config.num_neighbors, batch_size=config.batch_size)
+    train_loader = LinkNeighborLoader(
+        train_data,
+        edge_label_index=(CCSE, train_data[CCSE].edge_label_index),
+        edge_label=train_data[CCSE].edge_label,
+        shuffle=True,
+        neg_sampling_ratio=1.0,
+        **loader_kw,
+    )
+    val_loader = LinkNeighborLoader(
+        val_data,
+        edge_label_index=(CCSE, val_data[CCSE].edge_label_index),
+        edge_label=val_data[CCSE].edge_label,
+        shuffle=False,
+        neg_sampling_ratio=0.0,
+        **loader_kw,
+    )
+    test_loader = LinkNeighborLoader(
+        test_data,
+        edge_label_index=(CCSE, test_data[CCSE].edge_label_index),
+        edge_label=test_data[CCSE].edge_label,
+        shuffle=False,
+        neg_sampling_ratio=0.0,
+        **loader_kw,
+    )
+    print(f"Batchy treningowe na epokę: {len(train_loader)}")
+
+    model = Model(data, dim=config.embed_dim).to(device)
+    opt = torch.optim.Adam(
+        model.parameters(), lr=config.lr, weight_decay=config.weight_decay
+    )
+
+    best_ap = -1.0
+    best_auc = 0.0
+    best_epoch = 0
+    stale = 0
+    stopped_early = False
+
+    for epoch in range(1, config.epochs + 1):
+        model.train()
+        loss_sum, n = 0.0, 0
+        for batch in train_loader:
+            batch = batch.to(device)
+            opt.zero_grad()
+            z = model.encode(batch)
+            eli = batch[CCSE].edge_label_index
+            y = batch[CCSE].edge_label.float()
+            logits = model.predict(z, eli[0], eli[1])
+            loss = F.binary_cross_entropy_with_logits(logits, y)
+            loss.backward()
+            opt.step()
+            loss_sum += loss.item() * y.numel()
+            n += y.numel()
+
+        train_loss = loss_sum / max(n, 1)
+        val_auc, val_ap = evaluate(model, val_loader, device)
+        print(
+            f"Epoka {epoch:03d} | loss {train_loss:.4f} | "
+            f"val AUC {val_auc:.4f} | val AP {val_ap:.4f}"
+        )
+
+        if config.use_wandb:
+            import wandb
+
+            if wandb.run is not None:
+                wandb.log(
+                    {
+                        "epoch": epoch,
+                        "train_loss": train_loss,
+                        "val_auc": val_auc,
+                        "val_ap": val_ap,
+                    },
+                    step=epoch,
+                )
+
+        if trial is not None:
+            trial.report(val_ap, epoch)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+
+        if val_ap > best_ap:
+            best_ap = val_ap
+            best_auc = val_auc
+            best_epoch = epoch
+            stale = 0
+            save_checkpoint(
+                config.checkpoint,
+                model,
+                epoch,
+                val_ap,
+                val_auc,
+                config,
+            )
+            print(f"  → zapisano {config.checkpoint}")
+        else:
+            stale += 1
+            if stale >= config.patience:
+                print(
+                    f"Early stopping (brak poprawy val AP przez {config.patience} epok)."
+                )
+                stopped_early = True
+                break
+
+    if not os.path.isfile(config.checkpoint):
+        raise RuntimeError("Brak zapisanego checkpointu — trening nie poprawił val AP.")
+
+    ckpt = torch.load(config.checkpoint, map_location=device, weights_only=False)
+    model.load_state_dict(ckpt["model"])
+    val_auc, val_ap = evaluate(model, val_loader, device)
+    test_auc, test_ap = evaluate(model, test_loader, device)
+    print(f"\nNajlepszy checkpoint (epoka {ckpt['epoch']})")
+    print(f"  Val  | AUC {val_auc:.4f} | AP {val_ap:.4f}")
+    print(f"  Test | AUC {test_auc:.4f} | AP {test_ap:.4f}")
+
+    results = {
+        "best_val_ap": best_ap,
+        "best_val_auc": best_auc,
+        "best_epoch": best_epoch,
+        "val_auc": val_auc,
+        "val_ap": val_ap,
+        "test_auc": test_auc,
+        "test_ap": test_ap,
+        "checkpoint": config.checkpoint,
+        "stopped_early": stopped_early,
+    }
+
+    if config.use_wandb:
+        import wandb
+
+        if wandb.run is not None:
+            wandb.log(
+                {
+                    "best_val_ap": best_ap,
+                    "best_val_auc": best_auc,
+                    "best_epoch": best_epoch,
+                    "final_val_auc": val_auc,
+                    "final_val_ap": val_ap,
+                    "test_auc": test_auc,
+                    "test_ap": test_ap,
+                }
+            )
+            wandb.save(config.checkpoint)
+
+    return results
+
+
+def config_from_optuna_trial(trial: Any, base: TrainConfig) -> TrainConfig:
+    hop1 = trial.suggest_int("num_neighbors_hop1", 10, 25)
+    hop2 = trial.suggest_int("num_neighbors_hop2", 5, 15)
+    return TrainConfig(
+        processed_dir=base.processed_dir,
+        checkpoint=base.checkpoint,
+        seed=base.seed,
+        epochs=base.epochs,
+        patience=base.patience,
+        batch_size=trial.suggest_categorical("batch_size", [128, 256, 512]),
+        embed_dim=trial.suggest_categorical("embed_dim", [32, 64, 128]),
+        lr=trial.suggest_float("lr", 1e-4, 1e-2, log=True),
+        weight_decay=trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True),
+        num_neighbors=[hop1, hop2],
+        use_wandb=base.use_wandb,
+        wandb_project=base.wandb_project,
+        wandb_run_name=base.wandb_run_name,
+    )
+
+
+def promote_checkpoint(src: str, dst: str = DEFAULT_CHECKPOINT) -> None:
+    """Kopiuje checkpoint (np. najlepszy trial) do model.pth dla explain_gnn."""
+    os.makedirs(os.path.dirname(os.path.abspath(dst)) or ".", exist_ok=True)
+    shutil.copy2(src, dst)
+    print(f"Skopiowano {src} → {dst}")
