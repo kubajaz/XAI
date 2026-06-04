@@ -96,6 +96,7 @@ python - <<'PY'
 import importlib, sys
 required = [
     "torch", "torch_geometric", "sklearn", "wandb", "optuna",
+]
 failed = []
 for pkg in required:
     try:
