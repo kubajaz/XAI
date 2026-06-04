@@ -5,20 +5,27 @@ from __future__ import annotations
 import os
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from sklearn.metrics import average_precision_score, roc_auc_score
 from torch_geometric.loader import LinkNeighborLoader
 
-from dataset import get_hetionet_data
-from model import CCSE, Model
+from src.dataset import get_hetionet_data
+from src.model import CCSE, Model
+from src.paths import DEFAULT_CHECKPOINT, PROCESSED, WANDB_PROJECT_DEFAULT
 
-ROOT = os.path.dirname(os.path.abspath(__file__))
-PROCESSED = os.path.join(ROOT, "data", "processed")
-DEFAULT_CHECKPOINT = os.path.join(ROOT, "model.pth")
-WANDB_PROJECT_DEFAULT = "zzsn-gnn-xai"
-CHECKPOINTS_DIR = os.path.join(ROOT, "outputs", "checkpoints")
+__all__ = [
+    "DEFAULT_CHECKPOINT",
+    "PROCESSED",
+    "WANDB_PROJECT_DEFAULT",
+    "TrainConfig",
+    "load_checkpoint",
+    "resolve_processed_dir",
+    "run_training",
+    "set_seed",
+]
 
 
 @dataclass
@@ -39,6 +46,21 @@ class TrainConfig:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def resolve_processed_dir(config: TrainConfig) -> str:
+    return os.environ.get("DATA_PROCESSED", config.processed_dir)
+
+
+def load_checkpoint(path: str, device: torch.device) -> tuple[dict, TrainConfig]:
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Brak {path} — uruchom: python train.py")
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    raw = ckpt.get("config")
+    if raw is None:
+        print("UWAGA: checkpoint bez config — używam domyślnych hiperparametrów treningu")
+        return ckpt, TrainConfig(checkpoint=path)
+    return ckpt, TrainConfig(**raw)
 
 
 def set_seed(seed: int) -> None:

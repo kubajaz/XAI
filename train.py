@@ -2,7 +2,7 @@
 Trening: przewidywanie CcSE (Compound causes Side Effect) na Hetionet.
 
 Uruchomienie: python train.py [--batch-size ...]
-Logika treningu: train_utils.py
+Logika treningu: src/train_utils.py
 """
 
 from __future__ import annotations
@@ -11,13 +11,8 @@ import argparse
 import os
 from typing import Any
 
-from train_utils import (
-    DEFAULT_CHECKPOINT,
-    PROCESSED,
-    WANDB_PROJECT_DEFAULT,
-    TrainConfig,
-    run_training,
-)
+from src.paths import DEFAULT_CHECKPOINT, PROCESSED, WANDB_PROJECT_DEFAULT
+from src.train_utils import TrainConfig, run_training
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
