@@ -11,8 +11,7 @@ Projekt przewiduje relację **CcSE** (*Compound causes Side Effect*) na grafie w
 | `model.py` | RGCN (encoder) + DistMult (decoder) — score dla pary lek–skutek uboczny |
 | `train.py` | CLI treningu (entry point) |
 | `train_utils.py` | Logika treningu: config, pętla, ewaluacja, checkpointy |
-| `scripts/run_optuna_study.py` | Optuna — wiele trialów lokalnie |
-| `scripts/run_optuna_trial.py` | Optuna — jeden trial (SLURM array) lub `--show-best` |
+| `scripts/train_grid.sh` | Siatka hiperparametrów lokalnie (4 uruchomienia) |
 | `explain_gnn.py` | GNNExplainer: które krawędzie podgrafu uzasadniają score modelu |
 
 ## Uruchomienie
@@ -51,15 +50,23 @@ Indeksy `--compound` / `--side-effect` to numery węzłów w `HeteroData`. Flaga
 - Wyłączenie: `--no-wandb`
 - Zmienne: `WANDB_API_KEY` (wymagane przy logowaniu)
 
-## Optuna
+## Siatka hiperparametrów
 
-Lokalnie (jeden proces, wiele trialów):
+Wartości siatki są w **`scripts/train_grid.sh`** (jedno źródło dla lokalnego uruchomienia i SLURM). Domyślnie 3×3×3×3×3 = **243** kombinacje (`batch_size`, `embed_dim`, `lr`, `weight_decay`, `num_neighbors`).
+
+Lokalnie (pętla w jednym procesie):
 
 ```bash
-python scripts/run_optuna_study.py --n-trials 20 --promote-best
+bash scripts/train_grid.sh
 ```
 
-Checkpoints trialów: `outputs/checkpoints/trial_N.pth`. Study DB: `outputs/optuna/hetionet_ccse.db`.
+Na klastrze — **jedno** zadanie `sbatch`, ta sama pętla sekwencyjnie:
+
+```bash
+sbatch scripts/slurm/train_array.sh
+```
+
+Checkpointy: `outputs/checkpoints/` z tagiem `bs*_dim*_lr*_wd*_nh*` (na SLURM z prefiksem `grid_<jobId>_<n>_...`).
 
 ## SLURM
 
@@ -79,17 +86,9 @@ export WANDB_API_KEY=...
 cd /path/to/XAI
 sbatch scripts/slurm/train.sh
 
-# Siatka ręczna (4 zadania)
+# Siatka (1 zadanie, 243 treningi po kolei — dostosuj #SBATCH --time)
 sbatch scripts/slurm/train_array.sh
-
-# Optuna: jeden trial na zadanie array
-sbatch scripts/slurm/optuna_array.sh
-# Po zakończeniu array (login node, po activate_env):
-source scripts/slurm/activate_env.sh
-python scripts/run_optuna_trial.py --show-best --promote-best
 ```
-
-Dla równoległych trialów Optuny na wielu węzłach preferuj **`OPTUNA_STORAGE`** z PostgreSQL zamiast SQLite na NFS.
 
 Zmienne środowiskowe:
 
@@ -97,13 +96,10 @@ Zmienne środowiskowe:
 |---------|------|
 | `WANDB_API_KEY` | Autoryzacja W&B |
 | `WANDB_PROJECT` | Nadpisuje domyślny projekt |
-| `OPTUNA_STORAGE` | URL bazy study (np. `postgresql+psycopg2://...`) |
 | `DATA_PROCESSED` | Katalog z `.npz`/`.pkl` (domyślnie `$SCRATCH_BASE/data/hetionet/processed`) |
 | `DATA_DIR` | Korzeń danych na scratch (domyślnie `$SCRATCH_BASE/data/hetionet`) |
 | `SCRATCH_BASE` | Baza scratch (domyślnie `/net/tscratch/people/$USER`) |
 | `ENV_PREFIX` | Prefiks conda env (domyślnie `$SCRATCH_BASE/conda/py311_env`) |
-
-Przykładowa siatka lokalna: `bash scripts/train_grid.sh`
 
 ## Zadanie
 

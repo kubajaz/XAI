@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import os
-import shutil
 from dataclasses import asdict, dataclass, field
 from typing import Any
-
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
@@ -95,13 +93,8 @@ def save_checkpoint(
     )
 
 
-def run_training(
-    config: TrainConfig,
-    trial: Any | None = None,
-) -> dict[str, Any]:
-    """Pełny przebieg treningu. trial: opcjonalny optuna.Trial (report + prune)."""
-    import optuna
-
+def run_training(config: TrainConfig) -> dict[str, float | int | str | bool]:
+    """Pełny przebieg treningu."""
     set_seed(config.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Urządzenie: {device}")
@@ -206,11 +199,6 @@ def run_training(
                     step=epoch,
                 )
 
-        if trial is not None:
-            trial.report(val_ap, epoch)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
-
         if val_ap > best_ap:
             best_ap = val_ap
             best_auc = val_auc
@@ -275,30 +263,3 @@ def run_training(
             wandb.save(config.checkpoint)
 
     return results
-
-
-def config_from_optuna_trial(trial: Any, base: TrainConfig) -> TrainConfig:
-    hop1 = trial.suggest_int("num_neighbors_hop1", 10, 25)
-    hop2 = trial.suggest_int("num_neighbors_hop2", 5, 15)
-    return TrainConfig(
-        processed_dir=base.processed_dir,
-        checkpoint=base.checkpoint,
-        seed=base.seed,
-        epochs=base.epochs,
-        patience=base.patience,
-        batch_size=trial.suggest_categorical("batch_size", [128, 256, 512]),
-        embed_dim=trial.suggest_categorical("embed_dim", [32, 64, 128]),
-        lr=trial.suggest_float("lr", 1e-4, 1e-2, log=True),
-        weight_decay=trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True),
-        num_neighbors=[hop1, hop2],
-        use_wandb=base.use_wandb,
-        wandb_project=base.wandb_project,
-        wandb_run_name=base.wandb_run_name,
-    )
-
-
-def promote_checkpoint(src: str, dst: str = DEFAULT_CHECKPOINT) -> None:
-    """Kopiuje checkpoint (np. najlepszy trial) do model.pth dla explain_gnn."""
-    os.makedirs(os.path.dirname(os.path.abspath(dst)) or ".", exist_ok=True)
-    shutil.copy2(src, dst)
-    print(f"Skopiowano {src} → {dst}")
