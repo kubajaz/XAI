@@ -46,9 +46,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def args_to_config(args: argparse.Namespace) -> TrainConfig:
-    processed = os.environ.get("DATA_PROCESSED", args.processed_dir)
     return TrainConfig(
-        processed_dir=processed,
+        processed_dir=args.processed_dir,
         checkpoint=args.checkpoint,
         seed=args.seed,
         epochs=args.epochs,

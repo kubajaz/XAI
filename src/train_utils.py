@@ -161,7 +161,8 @@ def run_training(config: TrainConfig) -> dict[str, float | int | str | bool]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Urządzenie: {device}")
 
-    data = get_hetionet_data(config.processed_dir)
+    processed_dir = resolve_processed_dir(config)
+    data = get_hetionet_data(processed_dir)
     print(f"Graf: {data.num_nodes} węzłów, {data.num_edges} krawędzi")
     print(f"CcSE: {data[CCSE].edge_index.size(1)} relacji lek→skutek uboczny")
     print(

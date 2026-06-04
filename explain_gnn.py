@@ -20,6 +20,26 @@ from src.paths import DEFAULT_CHECKPOINT, DEFAULT_EXPLANATION_OUTPUT, WANDB_PROJ
 from src.train_utils import LinkSplitName, first_positive_ccse_pair
 
 
+def resolve_pair(
+    args: argparse.Namespace,
+    data,
+    split: LinkSplitName,
+) -> tuple[int, int, bool]:
+    """Zwraca (compound, side_effect, require_positive_ccse)."""
+    if args.example:
+        compound, side_effect = first_positive_ccse_pair(data)
+        print(
+            f"Para przykładowa ({split}, pozytywna CcSE): "
+            f"compound={compound}, side-effect={side_effect}"
+        )
+        return compound, side_effect, False
+    if args.compound is not None and args.side_effect is not None:
+        return args.compound, args.side_effect, split in ("val", "test")
+    raise SystemExit(
+        "error: podaj --compound i --side-effect albo użyj --example"
+    )
+
+
 def parse_args() -> argparse.Namespace:
     ap = argparse.ArgumentParser(description="GNNExplainer dla pary lek → skutek uboczny")
     ap.add_argument("--compound", type=int, default=None, help="Indeks leku w HeteroData")
@@ -68,15 +88,7 @@ def main() -> None:
     )
     print(f"Urządzenie: {device}", flush=True)
 
-    if args.example or args.compound is None or args.side_effect is None:
-        compound, side_effect = first_positive_ccse_pair(data)
-        print(
-            f"Para przykładowa ({split}, pozytywna CcSE): "
-            f"compound={compound}, side-effect={side_effect}"
-        )
-    else:
-        compound = args.compound
-        side_effect = args.side_effect
+    compound, side_effect, require_positive = resolve_pair(args, data, split)
 
     c_name = node_name(maps, "Compound", compound, processed_dir)
     se_name = node_name(maps, "Side Effect", side_effect, processed_dir)
@@ -88,6 +100,7 @@ def main() -> None:
         explainer_epochs=args.epochs,
         top_k=args.top_k,
         output=args.output,
+        require_positive_ccse=require_positive,
     )
 
     wandb = None
