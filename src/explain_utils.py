@@ -19,7 +19,13 @@ from torch_geometric.loader import LinkNeighborLoader
 from src.dataset import get_hetionet_data
 from src.model import CCSE, EdgeType, Model
 from src.paths import DEFAULT_EXPLANATION_OUTPUT
-from src.train_utils import TrainConfig, load_checkpoint, resolve_processed_dir, set_seed
+from src.train_utils import (
+    LinkSplitName,
+    TrainConfig,
+    get_link_split_graph,
+    load_checkpoint,
+    resolve_processed_dir,
+)
 
 _KIND_GLOBALS: dict[str, np.ndarray] = {}
 
@@ -325,24 +331,25 @@ def log_explanation_wandb(
 
 def build_explain_wrapper(
     checkpoint: str,
+    split: LinkSplitName = "test",
     device: torch.device | None = None,
 ) -> tuple[CcSEExplainWrapper, HeteroData, dict, TrainConfig, str, torch.device]:
-    """Ładuje model z checkpointu; zwraca wrapper, graf, mapy, config i katalog danych."""
+    """Ładuje model; zwraca wrapper i graf CcSE z wybranego podziału (train/val/test)."""
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     ckpt, train_config = load_checkpoint(checkpoint, device)
     processed_dir = resolve_processed_dir(train_config)
-    set_seed(train_config.seed)
 
-    data = get_hetionet_data(processed_dir)
+    full_data = get_hetionet_data(processed_dir)
+    split_data = get_link_split_graph(full_data, train_config.seed, split)
     maps = load_maps(processed_dir)
-    model = Model(data, dim=train_config.embed_dim).to(device)
+    model = Model(full_data, dim=train_config.embed_dim).to(device)
     model.load_state_dict(ckpt["model"])
     model.eval()
     wrapper = CcSEExplainWrapper(model).to(device)
     for p in wrapper.parameters():
         p.requires_grad = False
-    return wrapper, data, maps, train_config, processed_dir, device
+    return wrapper, split_data, maps, train_config, processed_dir, device
 
 
 def run_explanation(
