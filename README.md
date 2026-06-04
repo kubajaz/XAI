@@ -75,6 +75,8 @@ bash scripts/slurm/download_data.sh
 
 ```bash
 export WANDB_API_KEY=...
+# Uruchamiaj sbatch z katalogu głównego repozytorium (ustawia SLURM_SUBMIT_DIR):
+cd /path/to/XAI
 sbatch scripts/slurm/train.sh
 
 # Siatka ręczna (4 zadania)
