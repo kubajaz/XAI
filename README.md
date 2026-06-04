@@ -63,18 +63,26 @@ Checkpoints trialów: `outputs/checkpoints/trial_N.pth`. Study DB: `outputs/optu
 
 ## SLURM
 
-Szablony w `scripts/slurm/` (dostosuj `module load` / `venv` w plikach).
+Na klastrze (login node, raz na środowisko):
+
+```bash
+cd /path/to/XAI
+bash scripts/slurm/setup_env.sh
+```
+
+Środowisko conda trafia na scratch (`/net/tscratch/people/$USER/conda/py311_env` domyślnie). Zadania `sbatch` ładują je przez `source scripts/slurm/activate_env.sh`.
 
 ```bash
 export WANDB_API_KEY=...
-sbatch scripts/slurm/train.sbatch
+sbatch scripts/slurm/train.sh
 
 # Siatka ręczna (4 zadania)
-sbatch scripts/slurm/train_array.sbatch
+sbatch scripts/slurm/train_array.sh
 
 # Optuna: jeden trial na zadanie array
-sbatch scripts/slurm/optuna_array.sbatch
-# Po zakończeniu array:
+sbatch scripts/slurm/optuna_array.sh
+# Po zakończeniu array (login node, po activate_env):
+source scripts/slurm/activate_env.sh
 python scripts/run_optuna_trial.py --show-best --promote-best
 ```
 
@@ -88,6 +96,8 @@ Zmienne środowiskowe:
 | `WANDB_PROJECT` | Nadpisuje domyślny projekt |
 | `OPTUNA_STORAGE` | URL bazy study (np. `postgresql+psycopg2://...`) |
 | `DATA_PROCESSED` | Ścieżka do `data/processed` na węźle obliczeniowym |
+| `SCRATCH_BASE` | Baza scratch (domyślnie `/net/tscratch/people/$USER`) |
+| `ENV_PREFIX` | Prefiks conda env (domyślnie `$SCRATCH_BASE/conda/py311_env`) |
 
 Przykładowa siatka lokalna: `bash scripts/train_grid.sh`
 
