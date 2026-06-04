@@ -13,7 +13,6 @@ cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/../..}"
 source "$(dirname "$0")/activate_env.sh"
 
 export WANDB_API_KEY="${WANDB_API_KEY:?Set WANDB_API_KEY}"
-export DATA_PROCESSED="${DATA_PROCESSED:-$(pwd)/data/processed}"
 
 # SQLite na współdzielonym FS bywa problematyczny — na produkcji ustaw PostgreSQL:
 # export OPTUNA_STORAGE="postgresql+psycopg2://user:pass@host/optuna"

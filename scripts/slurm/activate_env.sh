@@ -21,6 +21,8 @@ _USERNAME="$(whoami)"
 
 export SCRATCH_BASE="${SCRATCH_BASE:-/net/tscratch/people/${_USERNAME}}"
 export ENV_PREFIX="${ENV_PREFIX:-${SCRATCH_BASE}/conda/py311_env}"
+export DATA_DIR="${DATA_DIR:-${SCRATCH_BASE}/data/hetionet}"
+export DATA_PROCESSED="${DATA_PROCESSED:-${DATA_DIR}/processed}"
 
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$SCRATCH_BASE/.cache}"
 export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$SCRATCH_BASE/.cache/pip}"
