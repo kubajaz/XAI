@@ -39,12 +39,12 @@ python train.py \
   --wandb-run-name my-run
 
 python explain_gnn.py --example
-python explain_gnn.py --compound 322 --side-effect 1245 --epochs 100 --top-k 15
+python explain_gnn.py --split test --compound 322 --side-effect 1245 --epochs 100 --top-k 15
 ```
 
 **Wyniki:** `model.pth`, logi w projekcie W&B `zzsn-gnn-xai`, `outputs/explanation_gnn.png`
 
-Indeksy `--compound` / `--side-effect` to numery węzłów w `HeteroData`. Flaga `--example` bierze pierwszą parę CcSE z grafu.
+Wyjaśnienia używają **tego samego podziału CcSE co trening** (`RandomLinkSplit`, `seed` z checkpointu). Domyślnie `--split test` (jak metryki testowe). Indeksy `--compound` / `--side-effect` to węzły w `HeteroData` na wybranym podziale. `--example` bierze pierwszą pozytywną parę CcSE z tego podziału.
 
 ## Weights & Biases
 

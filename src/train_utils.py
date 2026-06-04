@@ -4,23 +4,30 @@ from __future__ import annotations
 
 import os
 from dataclasses import asdict, dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
 import torch_geometric.transforms as T
 from sklearn.metrics import average_precision_score, roc_auc_score
+from torch_geometric.data import HeteroData
 from torch_geometric.loader import LinkNeighborLoader
 
 from src.dataset import get_hetionet_data
 from src.model import CCSE, Model
 from src.paths import DEFAULT_CHECKPOINT, PROCESSED, WANDB_PROJECT_DEFAULT
 
+LinkSplitName = Literal["train", "val", "test"]
+
 __all__ = [
     "DEFAULT_CHECKPOINT",
+    "LinkSplitName",
     "PROCESSED",
     "WANDB_PROJECT_DEFAULT",
     "TrainConfig",
+    "first_positive_ccse_pair",
+    "get_link_split_graph",
+    "link_split",
     "load_checkpoint",
     "resolve_processed_dir",
     "run_training",
@@ -61,6 +68,39 @@ def load_checkpoint(path: str, device: torch.device) -> tuple[dict, TrainConfig]
         print("UWAGA: checkpoint bez config — używam domyślnych hiperparametrów treningu")
         return ckpt, TrainConfig(checkpoint=path)
     return ckpt, TrainConfig(**raw)
+
+
+def link_split(
+    data: HeteroData, seed: int
+) -> tuple[HeteroData, HeteroData, HeteroData]:
+    """Ten sam podział CcSE co w treningu (RandomLinkSplit + seed)."""
+    set_seed(seed)
+    split = T.RandomLinkSplit(
+        num_val=0.1,
+        num_test=0.1,
+        disjoint_train_ratio=0.3,
+        add_negative_train_samples=False,
+        neg_sampling_ratio=1.0,
+        edge_types=CCSE,
+    )
+    return split(data)
+
+
+def get_link_split_graph(data: HeteroData, seed: int, split: LinkSplitName) -> HeteroData:
+    train_data, val_data, test_data = link_split(data, seed)
+    return {"train": train_data, "val": val_data, "test": test_data}[split]
+
+
+def first_positive_ccse_pair(graph: HeteroData) -> tuple[int, int]:
+    """Pierwsza pozytywna para CcSE z podziału (indeksy w HeteroData)."""
+    store = graph[CCSE]
+    labels = store.edge_label
+    pos_idx = (labels == 1).nonzero(as_tuple=False).view(-1)
+    if pos_idx.numel() == 0:
+        raise RuntimeError("Brak pozytywnych par CcSE w tym podziale link split.")
+    i = int(pos_idx[0])
+    eli = store.edge_label_index
+    return int(eli[0, i]), int(eli[1, i])
 
 
 def set_seed(seed: int) -> None:
@@ -129,15 +169,7 @@ def run_training(config: TrainConfig) -> dict[str, float | int | str | bool]:
         f"{data['Side Effect'].num_nodes} skutków ubocznych"
     )
 
-    split = T.RandomLinkSplit(
-        num_val=0.1,
-        num_test=0.1,
-        disjoint_train_ratio=0.3,
-        add_negative_train_samples=False,
-        neg_sampling_ratio=1.0,
-        edge_types=CCSE,
-    )
-    train_data, val_data, test_data = split(data)
+    train_data, val_data, test_data = link_split(data, config.seed)
 
     n_train = int((train_data[CCSE].edge_label == 1).sum())
     n_val = int(val_data[CCSE].edge_label.numel())
