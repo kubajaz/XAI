@@ -83,6 +83,11 @@ python -m pip install \
     --extra-index-url https://pypi.nvidia.com \
     -r "$REQUIREMENTS_CLEAN"
 
+# LinkNeighborLoader / NeighborSampler need pyg-lib (or legacy torch-sparse).
+PYG_WHEEL_INDEX="https://data.pyg.org/whl/torch-2.11.0+cu128.html"
+log "Installing pyg-lib from $PYG_WHEEL_INDEX"
+python -m pip install pyg-lib -f "$PYG_WHEEL_INDEX"
+
 # ── sanity check ─────────────────────────────────────────────────────────────
 echo "--------------------------------------------------"
 echo "USERNAME    : $(whoami)"
@@ -106,6 +111,9 @@ for pkg in required:
     except Exception as e:
         failed.append(pkg)
         print(f"[FAIL] {pkg:<20} {e}")
+
+import pyg_lib
+print(f"[OK]   pyg_lib              {pyg_lib.__version__}")
 
 import torch
 print()
