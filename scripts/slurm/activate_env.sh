@@ -4,7 +4,7 @@
 #
 # Loads the scratch conda env created by setup_env.sh.
 # Override via env vars (same defaults as setup_env.sh):
-#   SCRATCH_BASE, ENV_PREFIX
+#   SCRATCH_BASE, ENV_PREFIX, DATA_PROCESSED
 #
 # For setup_env.sh only: ACTIVATE_CONDA=0 source ...  (paths + caches, no conda)
 
@@ -32,7 +32,7 @@ export PYTHONNOUSERSITE=1
 
 mkdir -p \
   "$(dirname "$ENV_PREFIX")" \
-  "$XDG_CACHE_HOME" "$PIP_CACHE_DIR" "$CONDA_PKGS_DIRS" \
+  "$XDG_CACHE_HOME" "$PIP_CACHE_DIR"   "$CONDA_PKGS_DIRS" \
   "$TMPDIR"
 
 if [[ "${ACTIVATE_CONDA:-1}" != "1" ]]; then

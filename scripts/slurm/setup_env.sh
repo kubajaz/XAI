@@ -100,7 +100,7 @@ log "Verifying critical imports + torch CUDA build"
 python - <<'PY'
 import importlib, sys
 required = [
-    "torch", "torch_geometric", "sklearn", "wandb", "optuna",
+    "torch", "torch_geometric", "sklearn", "wandb",
 ]
 failed = []
 for pkg in required:

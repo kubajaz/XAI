@@ -83,7 +83,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         )
 
     try:
-        return run_training(config, trial=None)
+        return run_training(config)
     finally:
         if config.use_wandb:
             import wandb
