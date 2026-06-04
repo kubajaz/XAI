@@ -26,7 +26,35 @@ __all__ = [
     "CcSEExplainWrapper",
     "build_explain_wrapper",
     "run_explanation",
+    "validate_ccse_pair",
 ]
+
+
+def validate_ccse_pair(
+    data: HeteroData,
+    compound: int,
+    side_effect: int,
+    *,
+    require_positive: bool = False,
+) -> None:
+    """Sprawdza indeksy węzłów i opcjonalnie obecność pozytywnej krawędzi CcSE w podziale."""
+    n_c = data["Compound"].num_nodes
+    n_se = data["Side Effect"].num_nodes
+    if not (0 <= compound < n_c):
+        raise ValueError(f"compound={compound} poza zakresem [0, {n_c})")
+    if not (0 <= side_effect < n_se):
+        raise ValueError(f"side_effect={side_effect} poza zakresem [0, {n_se})")
+    if not require_positive:
+        return
+    store = data[CCSE]
+    eli = store.edge_label_index
+    labels = store.edge_label
+    match = ((eli[0] == compound) & (eli[1] == side_effect) & (labels == 1)).any()
+    if not match.item():
+        raise ValueError(
+            f"Brak pozytywnej krawędzi CcSE dla compound={compound}, "
+            f"side_effect={side_effect} w tym podziale"
+        )
 
 
 class CcSEExplainWrapper(nn.Module):
@@ -165,6 +193,12 @@ def run_explanation(
 ) -> None:
     compound = inputs.compound
     side_effect = inputs.side_effect
+    validate_ccse_pair(
+        data,
+        compound,
+        side_effect,
+        require_positive=inputs.require_positive_ccse,
+    )
     c_name = compound_name or node_name(maps, "Compound", compound, processed_dir)
     se_name = side_effect_name or node_name(maps, "Side Effect", side_effect, processed_dir)
 

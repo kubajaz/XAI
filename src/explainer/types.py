@@ -10,7 +10,7 @@ import numpy as np
 
 from src.paths import DEFAULT_EXPLANATION_OUTPUT
 
-_KIND_GLOBALS: dict[str, np.ndarray] = {}
+_KIND_GLOBALS: dict[tuple[str, str], np.ndarray] = {}
 
 
 @dataclass
@@ -32,6 +32,7 @@ class ExplainInputs:
     explainer_epochs: int = 100
     top_k: int = 15
     output: str = DEFAULT_EXPLANATION_OUTPUT
+    require_positive_ccse: bool = False
 
 
 def load_maps(processed_dir: str) -> dict:
@@ -48,9 +49,10 @@ def node_name(
 ) -> str:
     if n_id is not None:
         return maps["idx_to_id"][int(n_id)].split("::")[-1][:32]
-    if ntype not in _KIND_GLOBALS:
+    cache_key = (os.path.abspath(processed_dir), ntype)
+    if cache_key not in _KIND_GLOBALS:
         z = np.load(os.path.join(processed_dir, "hetionet_v1_baseline.npz"), mmap_mode="r")
         kind = maps["kind_to_int"][ntype]
-        _KIND_GLOBALS[ntype] = np.where(z["node_kind"] == kind)[0]
-    g = int(_KIND_GLOBALS[ntype][local])
+        _KIND_GLOBALS[cache_key] = np.where(z["node_kind"] == kind)[0]
+    g = int(_KIND_GLOBALS[cache_key][local])
     return maps["idx_to_id"][g].split("::")[-1][:32]
