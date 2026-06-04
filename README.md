@@ -71,7 +71,7 @@ Na klastrze — **jedno** zadanie `sbatch`, ta sama pętla sekwencyjnie (jeśli 
 sbatch scripts/slurm/train.sh   # pojedynczy trening
 ```
 
-Checkpointy: `outputs/checkpoints/` z tagiem `bs*_dim*_lr*_wd*_nh*` (na SLURM z prefiksem `grid_<jobId>_<n>_...`).
+Checkpointy: lokalnie `outputs/checkpoints/`; na SLURM `$SCRATCH_BASE/xai/outputs/checkpoints/` (tag `bs*_...`, z prefiksem `grid_<jobId>_<n>_...`).
 
 ## SLURM
 
@@ -91,8 +91,8 @@ export WANDB_API_KEY=...
 cd /path/to/XAI
 sbatch scripts/slurm/train.sh
 
-# Siatka (wiele treningów po kolei — dostosuj #SBATCH --time)
-bash scripts/slurm/train_grid.sh
+# Siatka (wiele treningów po kolei — dostosuj #SBATCH --time w train_grid.sh)
+sbatch scripts/slurm/train_grid.sh
 ```
 
 Zmienne środowiskowe:
