@@ -68,9 +68,10 @@ Na klastrze (login node, raz na środowisko):
 ```bash
 cd /path/to/XAI
 bash scripts/slurm/setup_env.sh
+bash scripts/slurm/download_data.sh
 ```
 
-Środowisko conda trafia na scratch (`/net/tscratch/people/$USER/conda/py311_env` domyślnie). Zadania `sbatch` ładują je przez `source scripts/slurm/activate_env.sh`.
+Środowisko conda trafia na scratch (`/net/tscratch/people/$USER/conda/py311_env` domyślnie). Dane Hetionet — na scratch w `$SCRATCH_BASE/data/hetionet/` (raw + `processed/`). Zadania `sbatch` ładują env i `DATA_PROCESSED` przez `source scripts/slurm/activate_env.sh`.
 
 ```bash
 export WANDB_API_KEY=...
@@ -95,7 +96,8 @@ Zmienne środowiskowe:
 | `WANDB_API_KEY` | Autoryzacja W&B |
 | `WANDB_PROJECT` | Nadpisuje domyślny projekt |
 | `OPTUNA_STORAGE` | URL bazy study (np. `postgresql+psycopg2://...`) |
-| `DATA_PROCESSED` | Ścieżka do `data/processed` na węźle obliczeniowym |
+| `DATA_PROCESSED` | Katalog z `.npz`/`.pkl` (domyślnie `$SCRATCH_BASE/data/hetionet/processed`) |
+| `DATA_DIR` | Korzeń danych na scratch (domyślnie `$SCRATCH_BASE/data/hetionet`) |
 | `SCRATCH_BASE` | Baza scratch (domyślnie `/net/tscratch/people/$USER`) |
 | `ENV_PREFIX` | Prefiks conda env (domyślnie `$SCRATCH_BASE/conda/py311_env`) |
 
