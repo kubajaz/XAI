@@ -9,8 +9,9 @@
 #SBATCH --mem=32G
 
 set -euo pipefail
-cd "${SLURM_SUBMIT_DIR:-$(dirname "$0")/../..}"
-source "$(dirname "$0")/activate_env.sh"
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
+cd "$REPO_ROOT"
+source "${REPO_ROOT}/scripts/slurm/activate_env.sh"
 
 export WANDB_API_KEY="${WANDB_API_KEY:?Set WANDB_API_KEY}"
 mkdir -p outputs/slurm outputs/checkpoints
