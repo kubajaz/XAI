@@ -30,7 +30,6 @@ log "PYTHON      : $PYTHON_VERSION"
 mkdir -p \
   "$(dirname "$ENV_PREFIX")" \
   "$XDG_CACHE_HOME" "$PIP_CACHE_DIR" "$CONDA_PKGS_DIRS" \
-  "$HF_HOME" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$HF_ASSETS_CACHE" \
   "$TMPDIR"
 
 # ── conda bootstrap ──────────────────────────────────────────────────────────
