@@ -6,13 +6,15 @@ Projekt przewiduje relację **CcSE** (*Compound causes Side Effect*) na grafie w
 
 | Plik | Opis |
 |------|------|
-| `scripts/prepare_hetionet.py` | Jednorazowe obranie i preprocessing danych |
-| `dataset.py` | Hetionet (`.npz` + `.pkl`) → graf `HeteroData` dla PyTorch Geometric |
-| `model.py` | RGCN (encoder) + DistMult (decoder) — score dla pary lek–skutek uboczny |
+| `scripts/prepare_hetionet.py` | Jednorazowe pobranie i preprocessing danych |
+| `src/dataset.py` | Hetionet (`.npz` + `.pkl`) → graf `HeteroData` |
+| `src/model.py` | RGCN (encoder) + DistMult (decoder) |
+| `src/train_utils.py` | Config, pętla treningu, ewaluacja, checkpointy |
+| `src/explain_utils.py` | GNNExplainer, ranking krawędzi, wizualizacja, W&B |
+| `src/paths.py` | Ścieżki projektu (`data/`, `outputs/`, `model.pth`) |
 | `train.py` | CLI treningu (entry point) |
-| `train_utils.py` | Logika treningu: config, pętla, ewaluacja, checkpointy |
-| `scripts/train_grid.sh` | Siatka hiperparametrów lokalnie (4 uruchomienia) |
-| `explain_gnn.py` | GNNExplainer: które krawędzie podgrafu uzasadniają score modelu |
+| `explain_gnn.py` | CLI wyjaśnień (entry point) |
+| `scripts/slurm/train_grid.sh` | Siatka hiperparametrów (lokalnie i SLURM) |
 
 ## Uruchomienie
 
@@ -52,18 +54,18 @@ Indeksy `--compound` / `--side-effect` to numery węzłów w `HeteroData`. Flaga
 
 ## Siatka hiperparametrów
 
-Wartości siatki są w **`scripts/train_grid.sh`** (jedno źródło dla lokalnego uruchomienia i SLURM). Domyślnie 3×3×3×3×3 = **243** kombinacje (`batch_size`, `embed_dim`, `lr`, `weight_decay`, `num_neighbors`).
+Wartości siatki są w **`scripts/slurm/train_grid.sh`** (jedno źródło dla lokalnego uruchomienia i SLURM).
 
-Lokalnie (pętla w jednym procesie):
+Lokalnie (pętla w jednym procesie, z katalogu głównego repozytorium):
 
 ```bash
-bash scripts/train_grid.sh
+bash scripts/slurm/train_grid.sh
 ```
 
-Na klastrze — **jedno** zadanie `sbatch`, ta sama pętla sekwencyjnie:
+Na klastrze — **jedno** zadanie `sbatch`, ta sama pętla sekwencyjnie (jeśli masz wrapper SLURM):
 
 ```bash
-sbatch scripts/slurm/train_array.sh
+sbatch scripts/slurm/train.sh   # pojedynczy trening
 ```
 
 Checkpointy: `outputs/checkpoints/` z tagiem `bs*_dim*_lr*_wd*_nh*` (na SLURM z prefiksem `grid_<jobId>_<n>_...`).
@@ -86,8 +88,8 @@ export WANDB_API_KEY=...
 cd /path/to/XAI
 sbatch scripts/slurm/train.sh
 
-# Siatka (1 zadanie, 243 treningi po kolei — dostosuj #SBATCH --time)
-sbatch scripts/slurm/train_array.sh
+# Siatka (wiele treningów po kolei — dostosuj #SBATCH --time)
+bash scripts/slurm/train_grid.sh
 ```
 
 Zmienne środowiskowe:

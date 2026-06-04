@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# Siatka hiperparametrów — używana lokalnie i z scripts/slurm/train_array.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 mkdir -p outputs/checkpoints
 
@@ -17,7 +16,6 @@ N_GRID=$(( ${#BS_VALUES[@]} * ${#DIM_VALUES[@]} * ${#LR_VALUES[@]} \
          * ${#WD_VALUES[@]} * ${#NEIGHBOR_PAIRS[@]} ))
 RUN=0
 
-# Opcjonalny prefiks (np. SLURM_JOB_ID) — ustawia train_array.sh
 GRID_PREFIX="${GRID_PREFIX:-}"
 
 for bs in "${BS_VALUES[@]}"; do
