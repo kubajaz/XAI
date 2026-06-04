@@ -10,7 +10,10 @@ Projekt przewiduje relację **CcSE** (*Compound causes Side Effect*) na grafie w
 | `src/dataset.py` | Hetionet (`.npz` + `.pkl`) → graf `HeteroData` |
 | `src/model.py` | RGCN (encoder) + DistMult (decoder) |
 | `src/train_utils.py` | Config, pętla treningu, ewaluacja, checkpointy |
-| `src/explain_utils.py` | GNNExplainer, ranking krawędzi, wizualizacja, W&B |
+| `src/explainer/types.py` | Typy wyjaśnień, mapowanie węzłów Hetionet |
+| `src/explainer/explain_utils.py` | GNNExplainer, podgraf, ranking krawędzi |
+| `src/explainer/plotter.py` | Wizualizacja podgrafu (matplotlib + networkx) |
+| `src/explainer/wandb_logger.py` | Logowanie wyjaśnień do W&B |
 | `src/paths.py` | Ścieżki projektu (`data/`, `outputs/`, `model.pth`) |
 | `train.py` | CLI treningu (entry point) |
 | `explain_gnn.py` | CLI wyjaśnień (entry point) |

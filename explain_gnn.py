@@ -2,7 +2,7 @@
 GNNExplainer dla predykcji CcSE — entry point.
 
 Uruchomienie: python explain_gnn.py [--checkpoint ...] [--example]
-Logika: src/explain_utils.py
+Logika: src/explainer/
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import os
 
-from src.explain_utils import (
+from src.explainer import (
     ExplainInputs,
     build_explain_wrapper,
     node_name,
@@ -90,9 +90,11 @@ def main() -> None:
         output=args.output,
     )
 
+    wandb = None
     if use_wandb:
-        import wandb
+        import wandb as _wandb
 
+        wandb = _wandb
         wandb.init(
             project=args.wandb_project,
             name=args.wandb_run_name,
@@ -126,11 +128,8 @@ def main() -> None:
             side_effect_name=se_name,
         )
     finally:
-        if use_wandb:
-            import wandb
-
-            if wandb.run is not None:
-                wandb.finish()
+        if wandb is not None and wandb.run is not None:
+            wandb.finish()
 
 
 if __name__ == "__main__":
