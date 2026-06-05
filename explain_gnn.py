@@ -1,7 +1,7 @@
 """
 GNNExplainer dla predykcji CcSE — entry point.
 
-Uruchomienie: python explain_gnn.py [--checkpoint ...] [--example]
+Uruchomienie: python explain_gnn.py [--checkpoint ...] [--example | --n-pairs N]
 Logika: src/explainer/
 """
 
@@ -17,27 +17,7 @@ from src.explainer import (
     run_explanation,
 )
 from src.paths import DEFAULT_CHECKPOINT, DEFAULT_EXPLANATION_OUTPUT, WANDB_PROJECT_DEFAULT
-from src.train_utils import LinkSplitName, first_positive_ccse_pair
-
-
-def resolve_pair(
-    args: argparse.Namespace,
-    data,
-    split: LinkSplitName,
-) -> tuple[int, int, bool]:
-    """Zwraca (compound, side_effect, require_positive_ccse)."""
-    if args.example:
-        compound, side_effect = first_positive_ccse_pair(data)
-        print(
-            f"Para przykładowa ({split}, pozytywna CcSE): "
-            f"compound={compound}, side-effect={side_effect}"
-        )
-        return compound, side_effect, False
-    if args.compound is not None and args.side_effect is not None:
-        return args.compound, args.side_effect, split in ("val", "test")
-    raise SystemExit(
-        "error: podaj --compound i --side-effect albo użyj --example"
-    )
+from src.train_utils import LinkSplitName, first_positive_ccse_pair, first_n_positive_ccse_pairs
 
 
 def parse_args() -> argparse.Namespace:
@@ -51,6 +31,7 @@ def parse_args() -> argparse.Namespace:
         default="test",
         help="Podział linków jak w treningu (domyślnie test, zgodnie z metrykami)",
     )
+    ap.add_argument("--n-pairs", type=int, default=None, help="Iteruj po pierwszych n pozytywnych parach CcSE (zamiast --example)")
     ap.add_argument("--epochs", type=int, default=100, help="Epoki optymalizacji masek")
     ap.add_argument("--top-k", type=int, default=15, help="Ile najważniejszych krawędzi pokazać")
     ap.add_argument("--output", default=DEFAULT_EXPLANATION_OUTPUT)
@@ -88,61 +69,91 @@ def main() -> None:
     )
     print(f"Urządzenie: {device}", flush=True)
 
-    compound, side_effect, require_positive = resolve_pair(args, data, split)
-
-    c_name = node_name(maps, "Compound", compound, processed_dir)
-    se_name = node_name(maps, "Side Effect", side_effect, processed_dir)
-    print(f"Para: {c_name} → {se_name}", flush=True)
-
-    inputs = ExplainInputs(
-        compound=compound,
-        side_effect=side_effect,
-        explainer_epochs=args.epochs,
-        top_k=args.top_k,
-        output=args.output,
-        require_positive_ccse=require_positive,
-    )
-
-    wandb = None
-    if use_wandb:
-        import wandb as _wandb
-
-        wandb = _wandb
-        wandb.init(
-            project=args.wandb_project,
-            name=args.wandb_run_name,
-            job_type="explain",
-            config={
-                "checkpoint": args.checkpoint,
-                "train_config": train_config.to_dict(),
-                "split": split,
-                "compound": compound,
-                "side_effect": side_effect,
-                "compound_name": c_name,
-                "side_effect_name": se_name,
-                "epochs": args.epochs,
-                "top_k": args.top_k,
-                "output": args.output,
-                "example": args.example,
-            },
+    # Build list of (compound, side_effect) pairs to explain
+    if args.n_pairs is not None:
+        pairs = first_n_positive_ccse_pairs(data, n=args.n_pairs)
+        print(f"Pierwsze {len(pairs)} pozytywnych par CcSE ({split})", flush=True)
+    elif args.example:
+        compound, side_effect = first_positive_ccse_pair(data)
+        print(
+            f"Para przykładowa ({split}, pozytywna CcSE): "
+            f"compound={compound}, side-effect={side_effect}"
+        )
+        pairs = [(compound, side_effect)]
+    elif args.compound is not None and args.side_effect is not None:
+        pairs = [(args.compound, args.side_effect)]
+    else:
+        raise SystemExit(
+            "error: podaj --compound i --side-effect, --example albo --n-pairs"
         )
 
-    try:
-        run_explanation(
-            wrapper,
-            data,
-            maps,
-            train_config,
-            processed_dir,
-            device,
-            inputs,
-            use_wandb=use_wandb,
-            compound_name=c_name,
-            side_effect_name=se_name,
+    # Derive output base: strip extension so we can suffix per pair
+    output_base, output_ext = os.path.splitext(args.output)
+    if not output_ext:
+        output_ext = ".png"
+
+    for idx, (compound, side_effect) in enumerate(pairs):
+        require_positive = (args.compound is None) and split in ("val", "test")
+
+        c_name = node_name(maps, "Compound", compound, processed_dir)
+        se_name = node_name(maps, "Side Effect", side_effect, processed_dir)
+        print(f"\n[{idx + 1}/{len(pairs)}] Para: {c_name} → {se_name}", flush=True)
+
+        out_path = (
+            f"{output_base}_{idx}{output_ext}"
+            if len(pairs) > 1
+            else f"{output_base}{output_ext}"
         )
-    finally:
-        if wandb is not None and wandb.run is not None:
-            wandb.finish()
+
+        inputs = ExplainInputs(
+            compound=compound,
+            side_effect=side_effect,
+            explainer_epochs=args.epochs,
+            top_k=args.top_k,
+            output=out_path,
+            require_positive_ccse=require_positive,
+        )
+
+        wandb = None
+        if use_wandb:
+            import wandb as _wandb
+
+            wandb = _wandb
+            wandb.init(
+                project=args.wandb_project,
+                name=args.wandb_run_name,
+                job_type="explain",
+                config={
+                    "checkpoint": args.checkpoint,
+                    "train_config": train_config.to_dict(),
+                    "split": split,
+                    "compound": compound,
+                    "side_effect": side_effect,
+                    "compound_name": c_name,
+                    "side_effect_name": se_name,
+                    "epochs": args.epochs,
+                    "top_k": args.top_k,
+                    "output": out_path,
+                    "pair_index": idx,
+                },
+            )
+
+        try:
+            run_explanation(
+                wrapper,
+                data,
+                maps,
+                train_config,
+                processed_dir,
+                device,
+                inputs,
+                use_wandb=use_wandb,
+                compound_name=c_name,
+                side_effect_name=se_name,
+            )
+        finally:
+            if wandb is not None and wandb.run is not None:
+                wandb.finish()
 
 
 if __name__ == "__main__":
