@@ -26,6 +26,7 @@ __all__ = [
     "WANDB_PROJECT_DEFAULT",
     "TrainConfig",
     "first_positive_ccse_pair",
+    "first_n_positive_ccse_pairs",
     "get_link_split_graph",
     "link_split",
     "load_checkpoint",
@@ -93,14 +94,19 @@ def get_link_split_graph(data: HeteroData, seed: int, split: LinkSplitName) -> H
 
 def first_positive_ccse_pair(graph: HeteroData) -> tuple[int, int]:
     """Pierwsza pozytywna para CcSE z podziału (indeksy w HeteroData)."""
+    return first_n_positive_ccse_pairs(graph, n=1)[0]
+
+
+def first_n_positive_ccse_pairs(graph: HeteroData, n: int) -> list[tuple[int, int]]:
+    """Pierwsze *n* pozytywnych par CcSE z podziału (indeksy w HeteroData)."""
     store = graph[CCSE]
     labels = store.edge_label
     pos_idx = (labels == 1).nonzero(as_tuple=False).view(-1)
     if pos_idx.numel() == 0:
         raise RuntimeError("Brak pozytywnych par CcSE w tym podziale link split.")
-    i = int(pos_idx[0])
+    pos_idx = pos_idx[:n]
     eli = store.edge_label_index
-    return int(eli[0, i]), int(eli[1, i])
+    return [(int(eli[0, i]), int(eli[1, i])) for i in pos_idx]
 
 
 def set_seed(seed: int) -> None:
